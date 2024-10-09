@@ -172,7 +172,7 @@ def login_page():
         """)
 
 def main_website():
-    main_website_path = 'example.py'
+    main_website_path = 'main.py'
     spec = importlib.util.spec_from_file_location("main_website", main_website_path)
     main_website_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(main_website_module)
