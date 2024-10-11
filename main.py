@@ -74,7 +74,8 @@ st.markdown("""
 if option == 'Chat':
     example_text = st.sidebar.selectbox("You can start by asking me...", ['Tell me a joke', 'Tell me a fun fact', 'Invent a new superhero and describe their powers.',
                                                                        'Name a dish and tell me its recipe', 'Recommend me a holiday destination', 'Recommend me some good movies', 'Recommend me a new hobby',
-                                                                       'Write a poem', 'Write a letter', 'Recommend me some books for reading', 'Give a format for Resume', "Tell me the thought for the day"])
+                                                                       'Write a poem', 'Write a letter', 'Recommend me some books for reading', 'Give a format for Resume', "Tell me the thought for the day", 
+                                                                         'Explain the theory of relativity'])
     if st.sidebar.button("Use Example"):
         st.session_state['input_text'] = example_text
         submit_text()
@@ -152,7 +153,7 @@ elif option == 'About':
     st.write(""" 
     ### About this Web Service
     - It is an AI chatbot clone of Google Gemini.
-    - This web service utilizes API keys from [Google Gemini](https://www.gemini.google.com/) to incorporate chat based and image to text models.
+    - This web service utilizes API keys from [Google Gemini](https://gemini.google.com/app) to incorporate chat based and image to text models.
     - This web service makes use of the [Assembly AI](https://www.assemblyai.com/) model for speech to text functionality.
     - The web service is built using [Streamlit](https://streamlit.io/), with backend services powered by [Firebase](https://firebase.google.com/)""")
     
