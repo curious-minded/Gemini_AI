@@ -22,16 +22,37 @@ if 'input_text' not in st.session_state:
     st.session_state['input_text'] = ""
 
 def get_text_response(question):
-    try:
-        response = text_model.generate_content(question)
-        if response.text:
+    max_retries = 3
+    retries = 0
+    
+    while retries < max_retries:
+        try:
+            response = text_model.generate_content(question)
+            if response.text:
                 return response.text
-        else:
-            raise ValueError("No valid response returned.")
+            else:
+                raise ValueError("No valid response returned.")
         
-    except ValueError as e:
-        st.warning("Unable to process the request. It may have been blocked or flagged. Please try a different query.")
-        return "Sorry, I'm unable to answer that right now."
+        except InternalServerError as e:
+            st.warning("Internal server error occurred. Retrying...")
+            retries += 1
+            time.sleep(2)  
+        
+        except TimeoutError as e:
+            st.warning("Request timed out. Retrying...")
+            retries += 1
+            time.sleep(2)  
+        
+        except ValueError as e:
+            st.warning("Unable to process the request. It may have been blocked or flagged. Please try a different query.")
+            return "Sorry, I'm unable to answer that right now."
+        
+        except Exception as e:
+            st.error(f"An unexpected error occurred: {str(e)}")
+            return "Sorry, something went wrong."
+    
+    st.error("Failed to get a response after multiple attempts. Please try again later.")
+    return "Sorry, I'm unable to provide an answer at the moment."
 
 def get_image_response(image):
     response = image_model.generate_content(image)
