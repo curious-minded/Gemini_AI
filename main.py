@@ -8,63 +8,57 @@ import requests
 import time
 import io
 
+# Load environment variables
 load_dotenv()
-
 api_key = os.getenv("GOOGLE_API_KEY")
 assembly_api_key = os.getenv("ASSEMBLYAI_API_KEY")
 
 genai.configure(api_key=api_key)
-text_model = genai.GenerativeModel("gemini-pro")
-image_model = genai.GenerativeModel("gemini-1.5-flash")
 
-if 'chat_history' not in st.session_state:
-    st.session_state['chat_history'] = []
-if 'input_text' not in st.session_state:
-    st.session_state['input_text'] = ""
+# Initialize or retrieve session state variables
+st.session_state.setdefault('chat_history', [])
+st.session_state.setdefault('input_text', "")
 
+# Function to get chatbot response
 def get_text_response(question):
-    max_retries = 3
-    retries = 0
-    while retries < max_retries:
+    for _ in range(3):
         try:
             response = text_model.generate_content(question)
-            if hasattr(response, 'text') and response.text:
+            if getattr(response, 'text', None):
                 return response.text
-            else:
-                raise ValueError("No valid response returned.")
-        except InternalServerError:
-            st.warning("Internal server error occurred. Retrying...")
-            retries += 1
-            time.sleep(2)
-        except DeadlineExceeded:
-            st.warning("Request timed out. Retrying...")
-            retries += 1
+            raise ValueError("No valid response returned.")
+        except (InternalServerError, DeadlineExceeded):
+            st.warning("Server issue, retrying...")
             time.sleep(2)
         except ValueError:
-            st.warning("Unable to process the request. It may have been blocked or flagged.\nPlease try a different query.")
-            return "Sorry, I'm unable to answer that right now."
+            st.warning("Unable to process request. Try a different query.")
+            return "Sorry, I can't answer that right now."
         except Exception as e:
-            st.error(f"An unexpected error occurred: {e}")
-            return "Sorry, something went wrong."
-    st.error("Failed to get a response after multiple attempts. Please try again later.")
-    return "Sorry, I'm unable to provide an answer at the moment."
+            return f"Error: {e}"
+    return "Failed after multiple attempts."
 
+# Function to get image analysis
 def get_image_response(image):
     response = image_model.generate_content(image)
-    return response.text if hasattr(response, 'text') else str(response)
+    return getattr(response, 'text', str(response))
 
+# Submit user text to chat history and generate bot reply
 def submit_text():
     user_input = st.session_state['input_text']
-    if user_input:
-        # Append user message
-        st.session_state['chat_history'].append(("You", user_input))
-        # Get bot response
-        response = get_text_response(user_input)
-        st.session_state['chat_history'].append(("Bot", response))
-        st.session_state['input_text'] = ""
+    if not user_input:
+        return
+    # Append user message
+    st.session_state['chat_history'].append(("You", user_input))
+    # Get and append bot response
+    bot_reply = get_text_response(user_input)
+    st.session_state['chat_history'].append(("Bot", bot_reply))
+    # Clear input field
+    st.session_state['input_text'] = ""
+    return bot_reply
 
+# Prepare download of chat history
 def download_chat_history():
-    return "\n".join(f"{role}: {text}" for role, text in st.session_state['chat_history'])
+    return "\n".join(f"{r}: {m}" for r, m in st.session_state['chat_history'])
 
 def generate_download_link(text, filename):
     st.sidebar.download_button(
@@ -74,118 +68,100 @@ def generate_download_link(text, filename):
         mime="text/plain"
     )
 
-st.sidebar.subheader(f"Welcome to your dashboard {st.session_state.get('handle', 'User')}!")
+# Sidebar: choose function
+st.sidebar.subheader(f"Welcome, {st.session_state.get('handle','User')}!")
 option = st.sidebar.selectbox(
-    "How can I assist you?",
-    ['Chat', 'Image Analysis', 'Speech-to-text', 'About'],
-    help='Choose a functionality. Click outside to close.'
+    "Functionality:", ['Chat','Image Analysis','Speech-to-text','About']
 )
 
 st.markdown("""
 <style>
-[data-testid="stSidebar"] {
-        background-color: rgba(0, 0, 0, 0.7);
-        color: white;
-}
+[data-testid="stSidebar"] { background-color: rgba(0,0,0,0.7); color: white; }
 </style>
 """, unsafe_allow_html=True)
 
+# Chat section with latest Q then A first
+def render_chat():
+    example = st.sidebar.selectbox("Example prompts:", [
+        'Tell me a joke','Explain relativity','Suggest a hobby', 'Write a poem', 'give me a resume template'
+    ])
+    if st.sidebar.button("Use example"):
+        st.session_state['input_text'] = example
+        submit_text()
+
+    st.text_input("Your question:", key='input_text', on_change=submit_text)
+    history = st.session_state['chat_history']
+    # Display pairs in reverse order: latest question then its response
+    for i in range(len(history)-2, -1, -2):
+        user, question = history[i]
+        bot_label, answer = history[i+1]
+        st.markdown(f"**{user}:** {question}")
+        st.markdown(f"**{bot_label}:** {answer}")
+
+# Set models (replace with your valid model names)
+text_model = genai.GenerativeModel("models/gemini-1.5-flash")
+image_model = genai.GenerativeModel("models/gemini-1.5-flash")
+
+# Render based on selected option
 if option == 'Chat':
-    example_text = st.sidebar.selectbox(
-        "You can start by asking me...",
-        [
-            'Tell me a joke', 'Tell me a fun fact', 'Invent a new superhero',
-            'Name a dish and tell me its recipe', 'Recommend a holiday destination',
-            'Recommend good movies', 'Recommend a new hobby', 'Write a poem',
-            'Write a letter', 'Recommend books', 'Format for Resume',
-            'Thought for the day', 'Explain the theory of relativity'
-        ]
-    )
-    if st.sidebar.button("Use Example"):
-        st.session_state['input_text'] = example_text
-        submit_text()
-
-    st.text_input("Input for Chatbot:", key="input_text", on_change=submit_text)
-
-    # Display conversation
-    for role, message in st.session_state['chat_history']:
-        if role == "You":
-            st.markdown(f"**You:** {message}")
-        else:
-            st.markdown(f"**Bot:** {message}")
-
+    render_chat()
 elif option == 'Image Analysis':
-    uploaded_file = st.file_uploader("Choose an image...", type=['jpg', 'jpeg', 'png'])
-    if uploaded_file:
-        img = Image.open(uploaded_file)
-        st.image(img, caption='Uploaded Image', use_column_width=True)
-        if st.button("Tell me about this image"):
-            response = get_image_response(img)
-            st.subheader("The response is:")
-            st.write(response)
-            st.session_state['chat_history'].append(("You", uploaded_file.name))
-            st.session_state['chat_history'].append(("Bot", response))
-
+    file = st.file_uploader("Upload image:", type=['jpg','jpeg','png'])
+    if file:
+        img = Image.open(file)
+        st.image(img, use_column_width=True)
+        if st.button("Analyze image"):
+            resp = get_image_response(img)
+            st.subheader("Analysis result:")
+            st.write(resp)
+            st.session_state['chat_history'] += [("You", file.name), ("Bot", resp)]
 elif option == 'Speech-to-text':
-    def transcribe_audio(audio_file):
-        headers = {'authorization': assembly_api_key, 'content-type': 'application/json'}
-        upload_resp = requests.post(
-            'https://api.assemblyai.com/v2/upload', headers=headers, files={'file': audio_file}
-        )
-        audio_url = upload_resp.json().get('upload_url')
-        if not audio_url:
-            return "Failed to upload file."
-        json_data = {'audio_url': audio_url}
-        transcript_resp = requests.post(
-            'https://api.assemblyai.com/v2/transcript', headers=headers, json=json_data
-        )
-        transcript_id = transcript_resp.json().get('id')
-        if not transcript_id:
-            return "Failed to request transcription."
-        while True:
-            status_resp = requests.get(
-                f'https://api.assemblyai.com/v2/transcript/{transcript_id}', headers=headers
-            )
-            status = status_resp.json().get('status')
-            if status == 'completed':
-                return status_resp.json().get('text')
-            if status == 'failed':
-                return 'Transcription failed.'
-            time.sleep(5)
-
-    uploaded_audio = st.file_uploader("Choose an audio file...", type=["wav", "mp3"])
-    if uploaded_audio and st.button("Generate response"):
-        st.write("Processing your audio...")
-        transcription = transcribe_audio(uploaded_audio)
+    audio = st.file_uploader("Upload audio:", type=['wav','mp3'])
+    if audio and st.button("Transcribe & Chat"):
+        st.write("Processing audio...")
+        # Transcribe audio
+        def transcribe(aud_file):
+            headers = {'authorization': assembly_api_key, 'content-type': 'application/json'}
+            up = requests.post('https://api.assemblyai.com/v2/upload', headers=headers, files={'file': aud_file})
+            url = up.json().get('upload_url')
+            if not url:
+                return "Upload failed."
+            tr = requests.post('https://api.assemblyai.com/v2/transcript', headers=headers, json={'audio_url': url})
+            tid = tr.json().get('id')
+            if not tid:
+                return "Transcription failed."
+            while True:
+                stt = requests.get(f'https://api.assemblyai.com/v2/transcript/{tid}', headers=headers)
+                status = stt.json().get('status')
+                if status == 'completed':
+                    return stt.json().get('text')
+                if status == 'failed':
+                    return 'Transcription failed.'
+                time.sleep(5)
+        text = transcribe(audio)
         st.subheader("Your query:")
-        st.write(transcription)
-        st.session_state['input_text'] = transcription
-        submit_text()
-        for role, message in st.session_state['chat_history']:
-            if role == "Bot":
-                st.subheader("The response is:")
-                st.write(message)
-
+        st.write(text)
+        # Submit to chat and display bot response
+        st.session_state['input_text'] = text
+        bot_response = submit_text()
+        st.subheader("Bot response:")
+        st.write(bot_response)
 elif option == 'About':
     st.header("About")
     st.write(
-        """
-        - AI chatbot clone of Google Gemini.
-        - Uses Google Gemini and AssemblyAI for speech-to-text.
-        - Built with Streamlit and Firebase.
-        """
+        "- AI chatbot using Google Gemini API.\n"
+        "- Speech-to-text via AssemblyAI.\n"
+        "- Built with Streamlit."
     )
 
 # Sidebar chat history and download
 with st.sidebar.expander("Chat History"):
     if not st.session_state['chat_history']:
-        st.write("None")
-    else:
-        for role, text in st.session_state['chat_history']:
-            st.write(f"{role}: {text}")
+        st.write("No history.")
+    for r, m in st.session_state['chat_history']:
+        st.write(f"{r}: {m}")
 
 if st.session_state['chat_history']:
-    chat_str = download_chat_history()
-    generate_download_link(chat_str, "chat_history.txt")
+    generate_download_link(download_chat_history(), "chat_history.txt")
 
-st.write("---\n*© 2024 Gemini Assistant. All rights reserved.*")
+st.write("---\n*© 2024 Gemini Assistant.*")
