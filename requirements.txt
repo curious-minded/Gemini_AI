@@ -3,6 +3,7 @@ firebase-admin
 python-dotenv
 setuptools
 google-generativeai
+google-api-core
 Pillow
 requests
 numpy
